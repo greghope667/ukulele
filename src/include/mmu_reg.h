@@ -1,5 +1,6 @@
 #pragma once
 
+#include "page.h"
 #include <stdint.h>
 
 typedef uint64_t page_map_entry_t;
@@ -28,9 +29,9 @@ typedef uint64_t page_map_entry_t;
 
 struct page_map_table {
 	page_map_entry_t entry[MMU_REG_PAGE_MAP_ENTRY_COUNT];
-} __attribute ((aligned(4096)));
+} PAGE_ALIGNED;
 
-_Static_assert(sizeof(struct page_map_table) == 4096, "");
+REQUIRE_PAGE_SIZED(struct page_map_table)
 
 enum mmu_page_map_level {
 	MMU_PML4,

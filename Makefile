@@ -19,12 +19,13 @@ LIMINE_DATA=/usr/share/limine
 # ===== Object files =====
 OFILES=obj/limine_reqs.o obj/kernel.o obj/serial.o \
 	obj/string.o obj/stdio.o obj/vfprintf.o obj/errno.o \
-	obj/fb.o obj/font/font.o
+	obj/fb.o obj/font/font.o obj/pmm.o obj/panic.o
 CRTI=obj/start.o
 
 # ===== Build dirs (tmpfs optional) =====
 dirs:
 	mkdir -p obj/font
+	mkdir -p isodir
 	mkdir -p bin
 
 dirs-tmpfs:

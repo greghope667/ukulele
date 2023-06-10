@@ -1,6 +1,5 @@
 #include "serial.h"
 #include "io_port.h"
-#include "x86.h"
 
 #include <stdint.h>
 
