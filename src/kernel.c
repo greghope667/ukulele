@@ -134,6 +134,8 @@ print_meminfo()
 	size_t largest_addr;
 	size_t largest_size = 0;
 
+	struct pmm* pmm = pmm_new (&rwpmmpg);
+
 	for ( int i=0; i<entries; i++ ) {
 		struct limine_memmap_entry* mem = mmapinfo.response->entries[i];
 		printf ("\t%016zx+%16zx : %s\n",
@@ -146,6 +148,7 @@ print_meminfo()
 				largest_size = mem->length;
 				largest_addr = mem->base;
 			}
+			pmm_add (pmm, mem->base, mem->length);
 		}
 
 		if (mem->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE)
@@ -156,8 +159,10 @@ print_meminfo()
 	printf ("\n\tfree %zu reclaim %zu\n", free_memory, reclaimable);
 	printf ("\tlargest %zu at %zx\n", largest_size, largest_addr);
 
-	struct pmm* pmm = pmm_initialise (&rwpmmpg);
-	pmm_add (pmm, largest_addr, largest_size);
+	struct pmm_stat stat = pmm_count_pages (pmm);
+
+	printf ("\tPMM total: %zu free: %zu used: %zu\n",
+			stat.total, stat.free, stat.used);
 }
 
 static void
@@ -279,6 +284,33 @@ clear_map_lower_half ()
 	}
 }
 
+#include "vaddress_space.h"
+static void
+test_vaddr()
+{
+	struct pmm* pmm = (struct pmm*) (&rwpmmpg);
+	struct vaddress_space* vaddr = vaddress_space_new (pmm, (void*)0x600, (void*)0x6000);
+
+	void* p, * q, * r;
+	vaddress_print (vaddr);
+	p = vaddress_allocate (vaddr, 0x100);
+	vaddress_print (vaddr);
+	vaddress_free (vaddr, p, 0x100);
+	vaddress_print (vaddr);
+	p = vaddress_allocate (vaddr, 0x100);
+	vaddress_print (vaddr);
+	q = vaddress_allocate (vaddr, 0x80);
+	vaddress_print (vaddr);
+	r = vaddress_allocate (vaddr, 0x200);
+	vaddress_print (vaddr);
+	vaddress_free (vaddr, p + 0x20, 0x30);
+	vaddress_print (vaddr);
+	vaddress_free (vaddr, p + 0x80, r - q + 0x20);
+	vaddress_print (vaddr);
+	vaddress_free (vaddr, 0, 0x5000);
+	vaddress_print (vaddr);
+}
+
 void
 kernel_main(void)
 {
@@ -313,6 +345,8 @@ kernel_main(void)
 
 	print_limine_info ();
 	clear_map_lower_half ();
+	test_vaddr ();
+
 
 	if (do_fractal)
 		framebuffer_dofractals (fb);

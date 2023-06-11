@@ -11,7 +11,7 @@ CFLAGS_WARNINGS=-Wall -Wextra -Wmissing-prototypes
 CFLAGS_ABI=-mno-sse -mcmodel=kernel
 CFLAGS=$(CFLAGS_WARNINGS) $(CFLAGS_ABI) -Isrc/include -Os -g3
 
-LDFLAGS=-nostdlib -static
+LDFLAGS=-nostdlib -static -Xlinker -Map=bin/output.map
 
 # Path to limine files (limine.sys, limine-*.bin)
 LIMINE_DATA=/usr/share/limine
@@ -19,7 +19,8 @@ LIMINE_DATA=/usr/share/limine
 # ===== Object files =====
 OFILES=obj/limine_reqs.o obj/kernel.o obj/serial.o \
 	obj/string.o obj/stdio.o obj/vfprintf.o obj/errno.o \
-	obj/fb.o obj/font/font.o obj/pmm.o obj/panic.o
+	obj/fb.o obj/font/font.o obj/pmm.o obj/panic.o obj/string_x86.o \
+	obj/vaddress.o
 CRTI=obj/start.o
 
 # ===== Build dirs (tmpfs optional) =====
@@ -46,7 +47,7 @@ obj/%.o: src/%.S
 
 # ===== Output binaries =====
 bin/os.elf: src/linker.ld $(CRTI) $(OFILES)
-	size obj/**.o
+	size $(CRTI) $(OFILES)
 	$(LD) $(LDFLAGS) -T src/linker.ld $(CRTI) $(OFILES) -o $@
 
 bin/os.img: bin/os.elf src/limine.cfg

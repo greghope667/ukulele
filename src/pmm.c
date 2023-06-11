@@ -1,8 +1,33 @@
 #include "pmm.h"
-#include "include/kstdio.h"
+#include "kstdio.h"
 #include "page.h"
 #include "panic.h"
 #include <string.h>
+
+/*
+ * Physical memory manager / allocator
+ *
+ * Usage:
+ * 	- create a struct pmm using statically allocated storage
+ * 	- add physical, ram-backed memory ranges to pmm
+ * 	- allocate + free physical pages
+ * 	- freeing is a no-op; just overrite by calling new() again
+ *
+ * Structures (each box = 1 page):
+ *
+ *    pmm
+ *  +=====+
+ *  |     |             +==========+====+====+====+====
+ *  |  0  | -- ctrl --> | ctrl_blk | usable pages ...
+ *  |     |             +==========+====+====+====+====
+ *  |     |             +==========+====+====+====+====
+ *  |  1  | -- ctrl --> | ctrl_blk | usable pages ...
+ *  |     |             +==========+====+====+====+====
+ *  | ... |
+ *  +=====+
+ *
+ * ctrl_blk is a bitset of free pages
+ */
 
 /* Below this many pages, skip actually adding block to allocator.
  * Save resources for later blocks which may be larger */
@@ -41,7 +66,7 @@ REQUIRE_PAGE_SIZED(struct pmm)
 
 
 struct pmm*
-pmm_initialise (void* control_page)
+pmm_new (void* control_page)
 {
 	require_page_aligned (control_page);
 	return memset (control_page, 0, PAGE_SIZE);
@@ -63,18 +88,11 @@ pmm_ctrl_initialise (struct pmm_control_block* ctrl, uint16_t pages)
 		ctrl->entry[full_entries] = ((uint64_t)-1) >> (64 - extra_bits);
 }
 
-static void*
-physical_to_virtual (uint64_t phys)
-{
-	return (void*)(phys + global_hhdm_offset);
-}
-
 static void
 pmm_setup_entry (struct pmm_ctrl_ptr* p, uint64_t physical_start, size_t size)
 {
 	// First page becomes control block
-	struct pmm_control_block* ctrl = physical_to_virtual (physical_start);
-	printf ("ctrl = %p, phys = %zx, size = %zx\n", p, physical_start, size);
+	struct pmm_control_block* ctrl = HHDM_POINTER (physical_start);
 	physical_start += PAGE_SIZE;
 	size -= PAGE_SIZE;
 
@@ -126,7 +144,7 @@ pmm_add (struct pmm* pmm, uint64_t physical_start, size_t size)
 	return;
 }
 
-uint16_t
+static uint16_t
 pmm_ctrl_alloc (struct pmm_control_block* blk)
 {
 	for ( int i=0; i<PMM_CTRL_ENTRIES; i++ ) {
@@ -180,4 +198,21 @@ pmm_free_page (struct pmm* pmm, uint64_t physical)
 
 	panic ("%s:%i %p Bad free (block %zx)\n",
 		   __FILE__, __LINE__, pmm, physical);
+}
+
+struct pmm_stat
+pmm_count_pages (struct pmm* pmm)
+{
+	struct pmm_stat stat = {};
+
+	for ( int i=0; i<PMM_ENTRIES; i++ ) {
+		struct pmm_ctrl_ptr* p = &pmm->entry[i];
+		if (p->active) {
+			stat.free += p->free_pages;
+			stat.used += (p->max_pages - p->free_pages);
+			stat.total += p->max_pages;
+		}
+	}
+
+	return stat;
 }
