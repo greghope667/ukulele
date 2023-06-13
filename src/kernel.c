@@ -6,6 +6,7 @@
 #include "serial.h"
 #include "kstdio.h"
 #include "mmu_reg.h"
+#include "macros.h"
 
 void _hcf(void);
 void kernel_main(void);
@@ -161,8 +162,8 @@ print_meminfo()
 
 	struct pmm_stat stat = pmm_count_pages (pmm);
 
-	printf ("\tPMM total: %zu free: %zu used: %zu\n",
-			stat.total, stat.free, stat.used);
+	printf ("\tPMM total: %zu free: %zu used: %zu overhead: %zu\n",
+			stat.total, stat.free, stat.used, stat.overhead);
 }
 
 static void
@@ -213,6 +214,11 @@ REG_READ(cr8)
 uint64_t global_hhdm_offset;
 
 static void
+scan_acpi (uint64_t rsdt)
+{
+}
+
+static void
 print_limine_info ()
 {
 	printf ("Bootload info resp: %p rev: %zi name: %s version: %s\n",
@@ -237,6 +243,17 @@ print_limine_info ()
 		struct limine_framebuffer fb = *fbinfo.response->framebuffers[i];
 		printf ("\t%p:%zux%zu pitch %zu bpp %hu\n",
 				fb.address, fb.width, fb.height, fb.pitch, fb.bpp);
+
+		if (fbinfo.response->revision >= 1) {
+			printf ("\tModes (%zu), ", fb.mode_count);
+
+			for ( int j=0; j<fb.mode_count; j++ ) {
+				struct limine_video_mode mode = *fb.modes[j];
+				printf ("(%zux%zu : %hu), ",
+						mode.width, mode.height, mode.bpp);
+			}
+			putchar ('\n');
+		}
 	}
 
 	printf ("HHDM resp: %p rev: %zu: offset: %zx\n",
@@ -311,6 +328,21 @@ test_vaddr()
 	vaddress_print (vaddr);
 }
 
+#include "arena_allocator.h"
+static void
+test_arena ()
+{
+	pmm_t pmm = (pmm_t) (&rwpmmpg);
+	allocator_t arena = make_arena_pmm_allocator (pmm, 4);
+
+	for (int i=0; i<20; i++) {
+		struct blk blk = kalloc (arena, 5 * i + 50);
+		printf ("Alloc %p + %zu\n", blk.ptr, blk.size);
+	}
+
+	DELETE_IFACE (arena);
+}
+
 void
 kernel_main(void)
 {
@@ -345,7 +377,9 @@ kernel_main(void)
 
 	print_limine_info ();
 	clear_map_lower_half ();
-	test_vaddr ();
+	//test_vaddr ();
+	test_arena ();
+	test_arena ();
 
 
 	if (do_fractal)

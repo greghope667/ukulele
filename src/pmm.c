@@ -3,6 +3,7 @@
 #include "page.h"
 #include "panic.h"
 #include <string.h>
+#include "macros.h"
 
 /*
  * Physical memory manager / allocator
@@ -65,7 +66,7 @@ REQUIRE_PAGE_SIZED(struct pmm_control_block)
 REQUIRE_PAGE_SIZED(struct pmm)
 
 
-struct pmm*
+pmm_t
 pmm_new (void* control_page)
 {
 	require_page_aligned (control_page);
@@ -89,11 +90,11 @@ pmm_ctrl_initialise (struct pmm_control_block* ctrl, uint16_t pages)
 }
 
 static void
-pmm_setup_entry (struct pmm_ctrl_ptr* p, uint64_t physical_start, size_t size)
+pmm_setup_entry (struct pmm_ctrl_ptr* p, physical_t start, size_t size)
 {
 	// First page becomes control block
-	struct pmm_control_block* ctrl = HHDM_POINTER (physical_start);
-	physical_start += PAGE_SIZE;
+	struct pmm_control_block* ctrl = HHDM_POINTER (start);
+	start += PAGE_SIZE;
 	size -= PAGE_SIZE;
 
 	size_t pages = size / PAGE_SIZE;
@@ -101,7 +102,7 @@ pmm_setup_entry (struct pmm_ctrl_ptr* p, uint64_t physical_start, size_t size)
 
 	*p = (struct pmm_ctrl_ptr) {
 		.ctrl = ctrl,
-		.physical_start = physical_start,
+		.physical_start = start,
 		.max_pages = pages,
 		.free_pages = pages,
 		.active = true,
@@ -109,11 +110,11 @@ pmm_setup_entry (struct pmm_ctrl_ptr* p, uint64_t physical_start, size_t size)
 }
 
 void
-pmm_add (struct pmm* pmm, uint64_t physical_start, size_t size)
+pmm_add (struct pmm* pmm, physical_t start, size_t size)
 {
-	require_page_aligned (physical_start);
+	require_page_aligned (start);
 
-	size = (size / PAGE_SIZE) * PAGE_SIZE;
+	size = ROUND_DOWN (size, PAGE_SIZE);
 
 	size_t remaining;
 	if (size > MAX_BLOCK_SIZE_BYTES) {
@@ -122,7 +123,7 @@ pmm_add (struct pmm* pmm, uint64_t physical_start, size_t size)
 		size = MAX_BLOCK_SIZE_BYTES;
 	} else if (size < MIN_BLOCK_SIZE_BYTES) {
 		eprintf ("Warning: Memory block %zx+%zx not allocated (%s)\n",
-				 physical_start, size, "too small");
+				 start, size, "too small");
 		return;
 	} else {
 		remaining = 0;
@@ -130,17 +131,17 @@ pmm_add (struct pmm* pmm, uint64_t physical_start, size_t size)
 
 	for ( int i=0; i<PMM_ENTRIES; i++ ) {
 		if (!pmm->entry[i].active) {
-			pmm_setup_entry (&pmm->entry[i], physical_start, size);
+			pmm_setup_entry (&pmm->entry[i], start, size);
 
 			if (remaining) // Tail recurse
-				return pmm_add (pmm, physical_start + size, remaining);
+				return pmm_add (pmm, start + size, remaining);
 
 			return;
 		}
 	}
 
 	eprintf ("Warning: Memory block %zx+%zx not allocated (%s)\n",
-			 physical_start, size, "out of resources");
+			 start, size, "out of resources");
 	return;
 }
 
@@ -159,7 +160,7 @@ pmm_ctrl_alloc (struct pmm_control_block* blk)
 	panic ("%s:%i Block %p should have space\n", __FILE__, __LINE__, blk);
 }
 
-uint64_t
+physical_t
 pmm_allocate_page (struct pmm* pmm)
 {
 	for ( int i=0; i<PMM_ENTRIES; i++ ) {
@@ -176,7 +177,7 @@ pmm_allocate_page (struct pmm* pmm)
 }
 
 void
-pmm_free_page (struct pmm* pmm, uint64_t physical)
+pmm_free_page (struct pmm* pmm, physical_t physical)
 {
 	if (physical == 0)
 		return;
@@ -203,14 +204,18 @@ pmm_free_page (struct pmm* pmm, uint64_t physical)
 struct pmm_stat
 pmm_count_pages (struct pmm* pmm)
 {
-	struct pmm_stat stat = {};
+	struct pmm_stat stat = {
+		.total = 1,
+		.overhead = 1,
+	};
 
 	for ( int i=0; i<PMM_ENTRIES; i++ ) {
 		struct pmm_ctrl_ptr* p = &pmm->entry[i];
 		if (p->active) {
+			stat.overhead++;
 			stat.free += p->free_pages;
 			stat.used += (p->max_pages - p->free_pages);
-			stat.total += p->max_pages;
+			stat.total += 1 + p->max_pages;
 		}
 	}
 

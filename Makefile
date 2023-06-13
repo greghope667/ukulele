@@ -17,23 +17,28 @@ LDFLAGS=-nostdlib -static -Xlinker -Map=bin/output.map
 LIMINE_DATA=/usr/share/limine
 
 # ===== Object files =====
-OFILES=obj/limine_reqs.o obj/kernel.o obj/serial.o \
-	obj/string.o obj/stdio.o obj/vfprintf.o obj/errno.o \
-	obj/fb.o obj/font/font.o obj/pmm.o obj/panic.o obj/string_x86.o \
-	obj/vaddress.o
+OFILES=obj/errno.o obj/fb.o obj/font/font.o obj/kernel.o obj/limine_reqs.o \
+	obj/panic.o obj/pmm.o obj/serial.o obj/stdio.o obj/string.o \
+	obj/string_x86.o obj/vaddress.o obj/vfprintf.o obj/allocator.o \
+	obj/arena_allocator.o
+
 CRTI=obj/start.o
 
-# ===== Build dirs (tmpfs optional) =====
-dirs:
-	mkdir -p obj/font
-	mkdir -p isodir
-	mkdir -p bin
+ISOFILES=isodir/boot/os.elf \
+	isodir/boot/limine/limine.cfg    isodir/boot/limine/limine.sys \
+	isodir/boot/limine/limine-cd.bin isodir/boot/limine/limine-cd-efi.bin
 
+# ===== Build dirs (tmpfs optional) =====
 dirs-tmpfs:
 	mkdir -p /dev/shm/osdev/ukulele/obj
 	ln -s /dev/shm/osdev/ukulele/obj obj
 	mkdir -p /dev/shm/osdev/ukulele/bin
 	ln -s /dev/shm/osdev/ukulele/bin bin
+
+dirs:
+	mkdir -p obj/font
+	mkdir -p isodir/boot/limine
+	mkdir -p bin
 
 # ===== Recipes =====
 obj/%.o: src/%.c
@@ -45,18 +50,22 @@ obj/%.o: src/%.s
 obj/%.o: src/%.S
 	$(AS) -c -o $@ $<
 
+# ISO recipes
+isodir/boot/limine/% :
+	cp $(LIMINE_DATA)/$(@F) isodir/boot/limine
+
+isodir/boot/limine/limine.cfg: src/limine.cfg
+	cp $< $@
+
+isodir/boot/os.elf: bin/os.elf
+	cp $< $@
+
 # ===== Output binaries =====
 bin/os.elf: src/linker.ld $(CRTI) $(OFILES)
 	size $(CRTI) $(OFILES)
 	$(LD) $(LDFLAGS) -T src/linker.ld $(CRTI) $(OFILES) -o $@
 
-bin/os.img: bin/os.elf src/limine.cfg
-	mkdir -p isodir/boot/limine
-	cp $(LIMINE_DATA)/limine.sys isodir/boot/limine/
-	cp $(LIMINE_DATA)/limine-cd.bin isodir/boot/limine/
-	cp $(LIMINE_DATA)/limine-cd-efi.bin isodir/boot/limine/
-	cp src/limine.cfg isodir/boot/limine/limine.cfg
-	cp bin/os.elf isodir/boot/os.elf
+bin/os.img: $(ISOFILES)
 	xorriso -as mkisofs -b boot/limine/limine-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
 		--efi-boot boot/limine/limine-cd-efi.bin \
@@ -66,7 +75,7 @@ bin/os.img: bin/os.elf src/limine.cfg
 
 # ===== Main targets =====
 clean:
-	rm -r bin/* obj/* isodir/*
+	find bin/ obj/ isodir/ -type f -delete
 
 build-bin: bin/os.elf
 build-iso: bin/os.img

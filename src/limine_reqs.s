@@ -1,5 +1,3 @@
-.intel_syntax noprefix
-
 	.section .limine_reqs
 	.quad blinfo
 	.quad kainfo
