@@ -1,7 +1,7 @@
 #include "allocator.h"
 #include "macros.h"
 #include "panic.h"
-#include "kstring.h"
+#include "libk/kstring.h"
 
 static struct blk
 doalloc (allocator_t alloc, size_t size)

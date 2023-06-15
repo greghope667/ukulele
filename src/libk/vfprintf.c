@@ -1,8 +1,7 @@
 #include "kstdio.h"
+#include "kstring.h"
 
 #include <limits.h>
-#include <stdbool.h>
-#include <string.h>
 
 #define setjmp __builtin_setjmp
 #define longjmp __builtin_longjmp

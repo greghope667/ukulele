@@ -9,7 +9,7 @@ LD=$(CC)
 
 CFLAGS_WARNINGS=-Wall -Wextra -Wmissing-prototypes
 CFLAGS_ABI=-mno-sse -mcmodel=kernel
-CFLAGS=$(CFLAGS_WARNINGS) $(CFLAGS_ABI) -Isrc/include -Os -g3
+CFLAGS=$(CFLAGS_WARNINGS) $(CFLAGS_ABI) -Isrc/include -Isrc -Os -g3
 
 LDFLAGS=-nostdlib -static -Xlinker -Map=bin/output.map
 
@@ -17,12 +17,20 @@ LDFLAGS=-nostdlib -static -Xlinker -Map=bin/output.map
 LIMINE_DATA=/usr/share/limine
 
 # ===== Object files =====
-OFILES=obj/errno.o obj/fb.o obj/font/font.o obj/kernel.o obj/limine_reqs.o \
-	obj/panic.o obj/pmm.o obj/serial.o obj/stdio.o obj/string.o \
-	obj/string_x86.o obj/vaddress.o obj/vfprintf.o obj/allocator.o \
-	obj/arena_allocator.o
+OFILES_MEM=pmm.o vaddress.o allocator.o arena_allocator.o
+OFILES_DRV=fb32.o serial.o
+OFILES_LIBK=errno.o stdio.o string.o string_x86.o vfprintf.o
+OFILES_ROOT=kernel.o panic.o
+OFILES_MISC=obj/boot/limine_reqs.o obj/font/font.o
 
-CRTI=obj/start.o
+OFILES=\
+	$(addprefix obj/memory/, $(OFILES_MEM))\
+	$(addprefix obj/drivers/, $(OFILES_DRV))\
+	$(addprefix obj/libk/, $(OFILES_LIBK))\
+	$(addprefix obj/, $(OFILES_ROOT) )\
+	$(OFILES_MISC)
+
+CRTI=obj/boot/start.o
 
 ISOFILES=isodir/boot/os.elf \
 	isodir/boot/limine/limine.cfg    isodir/boot/limine/limine.sys \
@@ -36,7 +44,7 @@ dirs-tmpfs:
 	ln -s /dev/shm/osdev/ukulele/bin bin
 
 dirs:
-	mkdir -p obj/font
+	mkdir -p $(addprefix obj/,font drivers libk memory boot)
 	mkdir -p isodir/boot/limine
 	mkdir -p bin
 
@@ -54,7 +62,7 @@ obj/%.o: src/%.S
 isodir/boot/limine/% :
 	cp $(LIMINE_DATA)/$(@F) isodir/boot/limine
 
-isodir/boot/limine/limine.cfg: src/limine.cfg
+isodir/boot/limine/limine.cfg: src/boot/limine.cfg
 	cp $< $@
 
 isodir/boot/os.elf: bin/os.elf

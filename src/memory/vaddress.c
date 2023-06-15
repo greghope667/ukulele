@@ -4,7 +4,7 @@
 
 #include "pmm.h"
 #include <string.h>
-#include "kstdio.h"
+#include "libk/kstdio.h"
 
 #define REGIONS_PER_BLOCK 100
 

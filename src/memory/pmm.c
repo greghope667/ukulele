@@ -1,8 +1,8 @@
 #include "pmm.h"
-#include "kstdio.h"
+#include "libk/kstdio.h"
 #include "page.h"
 #include "panic.h"
-#include <string.h>
+#include "libk/kstring.h"
 #include "macros.h"
 
 /*

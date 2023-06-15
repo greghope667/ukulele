@@ -1,8 +1,7 @@
 #pragma once
 
+#include "types.h"
 #include <stdarg.h>
-#include <stddef.h>
-#include <stdint.h>
 
 struct FILE;
 typedef struct FILE FILE;
@@ -22,8 +21,8 @@ size_t fwrite ( const void* restrict buffer, size_t size, size_t count, FILE* re
  * all FILEs must have cookies.
  */
 
-typedef __ssize_t cookie_write_function_t (void* cookie, const char* buf, size_t nbytes);
-typedef __ssize_t cookie_read_function_t (void* cookie, char* buf, size_t nbytes);
+typedef ssize_t cookie_write_function_t (void* cookie, const char* buf, size_t nbytes);
+typedef ssize_t cookie_read_function_t (void* cookie, char* buf, size_t nbytes);
 
 typedef struct cookie_io_functions {
 	cookie_read_function_t* reader;

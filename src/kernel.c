@@ -1,18 +1,19 @@
-#include <string.h>
 #include <limits.h>
 #include <limine.h>
 
-#include "fb.h"
-#include "serial.h"
-#include "kstdio.h"
-#include "mmu_reg.h"
+#include "libk/kstring.h"
+#include "drivers/fb32.h"
+#include "drivers/serial.h"
+#include "libk/kstdio.h"
+#include "drivers/mmu_reg.h"
+
 #include "macros.h"
 
 void _hcf(void);
 void kernel_main(void);
 
 // Cookies for debug output
-static __ssize_t
+static ssize_t
 serial_cookie_write (void* cookie, const char* buf, size_t nbytes)
 {
 	int port = *(int*)cookie;
@@ -33,7 +34,7 @@ struct fb_cookie {
 	int y;
 } fb_cookie;
 
-static __ssize_t
+static ssize_t
 fb_cookie_write (void* cookie, const char* buf, size_t nbytes)
 {
 	struct fb_cookie* fbc = cookie;
@@ -114,7 +115,7 @@ const char* limine_mmap_typename[] = {
 	"Framebuffer",
 };
 
-#include "pmm.h"
+#include "memory/pmm.h"
 
 static raw_page rwpmmpg;
 static struct pmm* pmm = (void*)&rwpmmpg;
@@ -301,7 +302,7 @@ clear_map_lower_half ()
 	}
 }
 
-#include "vaddress_space.h"
+#include "memory/vaddress_space.h"
 static void
 test_vaddr()
 {
@@ -328,7 +329,7 @@ test_vaddr()
 	vaddress_print (vaddr);
 }
 
-#include "arena_allocator.h"
+#include "memory/arena_allocator.h"
 static void
 test_arena ()
 {

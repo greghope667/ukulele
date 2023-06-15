@@ -2,6 +2,7 @@
 #include "kstring.h"
 #include "kerrno.h"
 
+#include "types.h"
 #include <stdbool.h>
 
 struct FILE {
@@ -40,7 +41,7 @@ fread ( void* restrict buffer, size_t size, size_t count, FILE* restrict stream)
 	if (nbytes == 0)
 		return 0;
 
-	__ssize_t n = read (cookie, buffer, nbytes);
+	ssize_t n = read (cookie, buffer, nbytes);
 
 	if (n < 0) {
 		stream->error = true;
@@ -75,7 +76,7 @@ size_t fwrite ( const void* restrict buffer, size_t size, size_t count, FILE* re
 	if (nbytes == 0)
 		return 0;
 
-	__ssize_t n = write (cookie, buffer, nbytes);
+	ssize_t n = write (cookie, buffer, nbytes);
 
 	if (n <= 0) {
 		stream->error = true;
