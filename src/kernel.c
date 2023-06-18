@@ -363,7 +363,7 @@ test_mmu ()
 	const char* data = "Writing and reading from seperate addresses";
 	int len = strlen (data) + 1;
 
-	mmu_assign (mmu_top_page, MEMORY_WRITE, write, PAGE_SIZE, page);
+	mmu_assign_1 (mmu_top_page, MEMORY_WRITE, page, write);
 	mmu_assign (mmu_top_page, 0, read, PAGE_SIZE, page);
 
 	memcpy (write, data, len);
@@ -372,8 +372,7 @@ test_mmu ()
 	mmu_remove (mmu_top_page, write, PAGE_SIZE);
 	puts (read);
 
-	mmu_remove (mmu_top_page, read, PAGE_SIZE);
-	mmu_remove (mmu_top_page, NULL, (SIZE_MAX / 2) + 1);
+	mmu_remove_1 (mmu_top_page, read);
 
 	pmm_free_page (pmm, page);
 }
@@ -402,7 +401,8 @@ test_exe ()
 	int ret = entry (21);
 	printf ("Return = %i\n", ret);
 
-	mmu_remove (mmu_top_page, load_ptr, PAGE_SIZE);
+	//mmu_remove (mmu_top_page, load_ptr, PAGE_SIZE);
+	mmu_remove_1 (mmu_top_page, load_ptr);
 	pmm_free_page (pmm, page);
 }
 

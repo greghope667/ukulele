@@ -93,11 +93,7 @@ assign_partial (struct mmu_page_map_part page_map,
 			continue;
 		}
 
-		if (entry & MMU_REG_PRESENT) {
-			//page_map_entry_t next = entry & MMU_REG_PHYS_ADDRESS_MASK;
-			//entry = next | flags;
-			//table->entry[i] = entry;
-		} else {
+		if (!(entry & MMU_REG_PRESENT)) {
 			page_map_entry_t next = allocate ();
 			entry = next | PM_PERMS;
 			table->entry[i] = entry;
@@ -148,6 +144,43 @@ mmu_assign (
 		assign_partial (top, start, MIN (end, LOWER_HALF_MAX), page, set_flags);
 	if (end > HIGHER_HALF_MIN)
 		assign_partial (top, MAX (start, HIGHER_HALF_MIN), end, page, set_flags);
+}
+
+void
+mmu_assign_1 (struct mmu_page_map_part top,
+	      enum mmu_flags flags,
+	      physical_t page,
+	      void* address)
+{
+	if (top.page == 0)
+		top = get_current_page_map_top();
+
+	require_page_aligned (top.page);
+	require_page_aligned (address);
+	require_page_aligned (page);
+	assert (top.depth >= PAGE_MAP_DEPTH_TOP
+		&& top.depth <= PAGE_MAP_DEPTH_BOTTOM,
+		"Invalid page_map_depth");
+
+	while ( top.depth < PAGE_MAP_DEPTH_BOTTOM ) {
+		int idx = ((uintptr_t)address >> depth_shift_size[top.depth])
+			& MMU_REG_VIRT_MASK;
+		struct mmu_page_map_table* table = HHDM_POINTER (top.page);
+		page_map_entry_t entry = table->entry[idx];
+
+		if (!(entry & MMU_REG_PRESENT)) {
+			entry = allocate () | PM_PERMS;
+			table->entry[idx] = entry;
+		}
+
+		top.depth++;
+		top.page = entry & MMU_REG_PHYS_ADDRESS_MASK;
+	}
+
+	int idx = ((uintptr_t)address >> depth_shift_size[PAGE_MAP_DEPTH_BOTTOM])
+		& MMU_REG_VIRT_MASK;
+	struct mmu_page_map_table* table = HHDM_POINTER (top.page);
+	table->entry[idx] = page | convert_flags (flags) | MMU_REG_PRESENT;
 }
 
 static void
@@ -247,6 +280,37 @@ mmu_remove (
 		remove_partial (top, start, MIN (end, LOWER_HALF_MAX));
 	if (end > HIGHER_HALF_MIN)
 		remove_partial (top, MAX (start, HIGHER_HALF_MIN), end);
+}
+
+void
+mmu_remove_1 (struct mmu_page_map_part top, void* address)
+{
+	if (top.page == 0)
+		top = get_current_page_map_top();
+
+	require_page_aligned (top.page);
+	require_page_aligned (address);
+	assert (top.depth >= PAGE_MAP_DEPTH_TOP
+		&& top.depth <= PAGE_MAP_DEPTH_BOTTOM,
+		"Invalid page_map_depth");
+
+	while ( top.depth < PAGE_MAP_DEPTH_BOTTOM ) {
+		int idx = ((uintptr_t)address >> depth_shift_size[top.depth])
+			& MMU_REG_VIRT_MASK;
+		struct mmu_page_map_table* table = HHDM_POINTER (top.page);
+		page_map_entry_t entry = table->entry[idx];
+
+		if (!(entry & MMU_REG_PRESENT))
+			return;
+
+		top.depth++;
+		top.page = entry & MMU_REG_PHYS_ADDRESS_MASK;
+	}
+
+	int idx = ((uintptr_t)address >> depth_shift_size[PAGE_MAP_DEPTH_BOTTOM])
+		& MMU_REG_VIRT_MASK;
+	struct mmu_page_map_table* table = HHDM_POINTER (top.page);
+	table->entry[idx] = 0;
 }
 
 struct mmu_page_map_part

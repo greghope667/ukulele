@@ -1,4 +1,12 @@
 #pragma once
+/*
+ * Simple driver for handling virtual->physical address translation.
+ * This header should be a (mostly) machine independent API.
+ *
+ * Page map entries are created using a physical allocator (PMM).
+ * Allocation failures are treated as panics right now, so we should probably
+ * use a seperate PMM reserved just for the MMU and page tables for reliability
+ */
 
 #include "types.h"
 
@@ -58,6 +66,10 @@ static const struct mmu_page_map_part mmu_top_page = {};
  */
 void mmu_initialise (struct pmm* pmm);
 
+/*
+ * Assign/unassign a virtual address to a physical range.
+ * This is currently a simple implementation, only using minimal size pages.
+ */
 void mmu_assign (struct mmu_page_map_part top,
 		 enum mmu_flags flags,
 		 void* address,
@@ -68,6 +80,23 @@ void mmu_remove (struct mmu_page_map_part top,
 		 void* address,
 		 size_t size);
 
+/*
+ * Slightly more efficient versions for the (relatively common) case
+ * of assigning/removing a single page, i.e. the above functions
+ * with size = PAGE_SIZE
+ */
+void mmu_assign_1 (struct mmu_page_map_part top,
+				   enum mmu_flags flags,
+				   physical_t page,
+				   void* address);
+
+void mmu_remove_1 (struct mmu_page_map_part top,
+				   void* address);
+
+/*
+ * Iterate through the page tables to find where a pointer goes.
+ * Mostly used for debugging, but can be used to find virtual->physical maps
+ */
 struct mmu_page_map_part mmu_lookup_step (
 	struct mmu_page_map_part top,
 	void* address
