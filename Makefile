@@ -18,7 +18,7 @@ LIMINE_DATA=/usr/share/limine
 
 # ===== Object files =====
 OFILES_MEM=pmm.o vaddress.o allocator.o arena_allocator.o
-OFILES_DRV=fb32.o serial.o
+OFILES_DRV=fb32.o serial.o mmu.o
 OFILES_LIBK=errno.o stdio.o string.o string_x86.o vfprintf.o
 OFILES_ROOT=kernel.o panic.o
 OFILES_MISC=obj/boot/limine_reqs.o obj/font/font.o
@@ -89,7 +89,7 @@ build-bin: bin/os.elf
 build-iso: bin/os.img
 
 run: build-iso
-	qemu-system-x86_64 -serial stdio -cdrom bin/os.img
+	qemu-system-x86_64 -serial stdio -cdrom bin/os.img | tee log.txt
 debug: build-iso
 	qemu-system-x86_64 -serial stdio -s -S -cdrom bin/os.img
 

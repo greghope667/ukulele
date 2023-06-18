@@ -1,11 +1,13 @@
 #include <limits.h>
 #include <limine.h>
+#include <stdint.h>
 
 #include "libk/kstring.h"
 #include "drivers/fb32.h"
 #include "drivers/serial.h"
 #include "libk/kstdio.h"
 #include "drivers/mmu_reg.h"
+#include "drivers/mmu.h"
 
 #include "macros.h"
 
@@ -296,7 +298,7 @@ print_limine_info ()
 static void
 clear_map_lower_half ()
 {
-	struct page_map_table* pml4 = (void*)(reg_cr3 () + hhdminfo.response->offset);
+	struct mmu_page_map_table* pml4 = (void*)(reg_cr3 () + hhdminfo.response->offset);
 	for (int i=0; i<256; i++) {
 		pml4->entry[i] = 0;
 	}
@@ -306,7 +308,6 @@ clear_map_lower_half ()
 static void
 test_vaddr()
 {
-	struct pmm* pmm = (struct pmm*) (&rwpmmpg);
 	struct vaddress_space* vaddr = vaddress_space_new (pmm, (void*)0x600, (void*)0x6000);
 
 	void* p, * q, * r;
@@ -344,6 +345,28 @@ test_arena ()
 	DELETE_IFACE (arena);
 }
 
+static void
+print_pmm_stats ()
+{
+	struct pmm_stat stat = pmm_count_pages (pmm);
+	printf ("PMM total: %zu free: %zu used: %zu overhead: %zu\n",
+			stat.total, stat.free, stat.used, stat.overhead);
+}
+
+static void
+test_mmu ()
+{
+	mmu_initialise (pmm);
+	physical_t page = pmm_allocate_page (pmm);
+	char* data = (void*)0x12345000ULL;
+	enum mmu_flags flags = MEMORY_WRITE;
+	print_pmm_stats ();
+	mmu_assign (mmu_top_page, flags, data, PAGE_SIZE, page);
+	print_pmm_stats ();
+	mmu_remove (mmu_top_page, data, PAGE_SIZE);
+	print_pmm_stats ();
+}
+
 void
 kernel_main(void)
 {
@@ -378,10 +401,8 @@ kernel_main(void)
 
 	print_limine_info ();
 	clear_map_lower_half ();
-	//test_vaddr ();
-	test_arena ();
-	test_arena ();
 
+	test_mmu ();
 
 	if (do_fractal)
 		framebuffer_dofractals (fb);

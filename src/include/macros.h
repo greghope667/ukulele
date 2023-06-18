@@ -11,6 +11,8 @@
 
 #define ROUND_UP(val, mult) ((((val) + (mult) - 1) / (mult)) * (mult))
 #define ROUND_DOWN(val, mult) (((val) / (mult)) * (mult))
+#define ROUND_UP_P2(val, mult) (((val) + (mult) - 1) & ~((mult)-1))
+#define ROUND_DOWN_P2(val, mult) ((val) & ~((mult)-1))
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #define MAX(x, y) ((x) < (y) ? (y) : (x))
