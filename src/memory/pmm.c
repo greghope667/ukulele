@@ -190,6 +190,11 @@ pmm_free_page (struct pmm* pmm, physical_t physical)
 			int pageindex = (physical - p->physical_start) / PAGE_SIZE;
 			int entry = pageindex / 64;
 			int bit = pageindex % 64;
+
+			if (p->ctrl->entry[entry] & (1ULL << bit))
+				panic ("%s:%i %p Double free (block %zx)\n",
+					__FILE__, __LINE__, pmm, physical);
+
 			p->ctrl->entry[entry] |= (1ULL << bit);
 			p->free_pages++;
 

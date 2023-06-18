@@ -356,15 +356,54 @@ print_pmm_stats ()
 static void
 test_mmu ()
 {
-	mmu_initialise (pmm);
 	physical_t page = pmm_allocate_page (pmm);
-	char* data = (void*)0x12345000ULL;
-	enum mmu_flags flags = MEMORY_WRITE;
-	print_pmm_stats ();
-	mmu_assign (mmu_top_page, flags, data, PAGE_SIZE, page);
-	print_pmm_stats ();
-	mmu_remove (mmu_top_page, data, PAGE_SIZE);
-	print_pmm_stats ();
+
+	char* write = (void*)0x12345000ULL;
+	char* read = (void*)0x98765000ULL;
+	const char* data = "Writing and reading from seperate addresses";
+	int len = strlen (data) + 1;
+
+	mmu_assign (mmu_top_page, MEMORY_WRITE, write, PAGE_SIZE, page);
+	mmu_assign (mmu_top_page, 0, read, PAGE_SIZE, page);
+
+	memcpy (write, data, len);
+	puts (read);
+
+	mmu_remove (mmu_top_page, write, PAGE_SIZE);
+	puts (read);
+
+	mmu_remove (mmu_top_page, read, PAGE_SIZE);
+	mmu_remove (mmu_top_page, NULL, (SIZE_MAX / 2) + 1);
+
+	pmm_free_page (pmm, page);
+}
+
+static void
+test_exe ()
+{
+	// Load a very basic program structure
+	// First 4 bytes are location, remainder is code
+	const char file[] = {
+		0x00, 0x40, 0x00, 0x00,
+		0x89, 0xf8, 0x01, 0xf8,
+		0xc3, // ret
+	};
+	int load = 0;
+	memcpy (&load, file, 4);
+	void* load_ptr = (void*)(uintptr_t)load;
+
+	uintptr_t page = pmm_allocate_page (pmm);
+	mmu_assign (mmu_top_page, MEMORY_WRITE, load_ptr, PAGE_SIZE, page);
+	memcpy (load_ptr, file, sizeof(file));
+	mmu_assign (mmu_top_page, MEMORY_EXEC, load_ptr, PAGE_SIZE, page);
+
+	int (*entry)(int) = load_ptr + 4;
+
+	int ret = entry (21);
+	printf ("Return = %i\n", ret);
+
+	mmu_remove (mmu_top_page, load_ptr, PAGE_SIZE);
+	pmm_free_page (pmm, page);
 }
 
 void
@@ -402,7 +441,12 @@ kernel_main(void)
 	print_limine_info ();
 	clear_map_lower_half ();
 
-	test_mmu ();
+	mmu_initialise (pmm);
+	for (int i=0; i<2; i++)
+		test_mmu ();
+	for (int i=0; i<2; i++)
+		test_exe ();
+	print_pmm_stats ();
 
 	if (do_fractal)
 		framebuffer_dofractals (fb);

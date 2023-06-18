@@ -68,7 +68,7 @@ void mmu_remove (struct mmu_page_map_part top,
 		 void* address,
 		 size_t size);
 
-struct mmu_page_map_part mmu_lookup (
+struct mmu_page_map_part mmu_lookup_step (
 	struct mmu_page_map_part top,
 	void* address
 );

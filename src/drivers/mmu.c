@@ -8,6 +8,9 @@
 #include "libk/kstring.h"
 #include "libk/kstdio.h"
 
+#define LOWER_HALF_MAX		0x0000800000000000
+#define HIGHER_HALF_MIN		0xffff800000000000
+
 static pmm_t global_mmu_pmm;
 
 void
@@ -54,6 +57,8 @@ convert_flags (enum mmu_flags flags)
 	return f;
 }
 
+const page_map_entry_t PM_PERMS = MMU_REG_WRITE |  MMU_REG_PRESENT;
+
 static physical_t
 allocate ()
 {
@@ -70,28 +75,31 @@ assign_partial (struct mmu_page_map_part page_map,
 		physical_t phys,
 		page_map_entry_t flags)
 {
-	int depth = page_map.depth;
-	int shift = depth_shift_size[depth];
-	uintptr_t base = ((start >> shift) & (~(uintptr_t)MMU_REG_VIRT_MASK)) << shift;
+	const int depth = page_map.depth;
+	const int shift = depth_shift_size[depth];
+	const uintptr_t base = ((start >> shift) & (~(uintptr_t)MMU_REG_VIRT_MASK)) << shift;
 
-	uintptr_t p2 = 1ULL << shift;
-	int start_idx = (ROUND_DOWN_P2 (start, p2) - base) >> shift;
-	int end_idx = (ROUND_UP_P2 (end, p2) - base) >> shift;
+	const uintptr_t p2 = 1ULL << shift;
+	const int start_idx = (ROUND_DOWN_P2 (start, p2) - base) >> shift;
+	const int end_idx = (ROUND_UP_P2 (end, p2) - base) >> shift;
 
 	for (size_t i=start_idx; i<end_idx; i++) {
-		printf ("assign depth %i idx %3zu\n", depth, i);
 		struct mmu_page_map_table* table = HHDM_POINTER (page_map.page);
 		page_map_entry_t entry = table->entry[i];
+		physical_t target = phys + ((i - start_idx) << shift);
 
 		if (depth == PAGE_MAP_DEPTH_BOTTOM) {
-			page_map_entry_t next = phys + i * PAGE_SIZE;
-			table->entry[i] = next | flags;
+			table->entry[i] = target | flags;
 			continue;
 		}
 
-		if (!(entry & MMU_REG_PRESENT)) {
+		if (entry & MMU_REG_PRESENT) {
+			//page_map_entry_t next = entry & MMU_REG_PHYS_ADDRESS_MASK;
+			//entry = next | flags;
+			//table->entry[i] = entry;
+		} else {
 			page_map_entry_t next = allocate ();
-			entry = next | flags | MMU_REG_PRESENT;
+			entry = next | PM_PERMS;
 			table->entry[i] = entry;
 		}
 
@@ -106,7 +114,7 @@ assign_partial (struct mmu_page_map_part page_map,
 		};
 
 		assign_partial (child, blk_start, blk_end,
-				phys + i * PAGE_SIZE, flags);
+				target, flags);
 	}
 }
 
@@ -121,8 +129,6 @@ mmu_assign (
 	if (top.page == 0)
 		top = get_current_page_map_top();
 
-	printf ("assign %p -> %zu\n", address, page);
-
 	require_page_aligned (top.page);
 	require_page_aligned (address);
 	require_page_aligned (size);
@@ -136,7 +142,12 @@ mmu_assign (
 	start = ROUND_DOWN_P2 (start, PAGE_SIZE);
 	end = ROUND_UP_P2 (end, PAGE_SIZE);
 
-	assign_partial (top, start, end, page, convert_flags (flags));
+	page_map_entry_t set_flags = convert_flags (flags) | MMU_REG_PRESENT;
+
+	if (start < LOWER_HALF_MAX)
+		assign_partial (top, start, MIN (end, LOWER_HALF_MAX), page, set_flags);
+	if (end > HIGHER_HALF_MIN)
+		assign_partial (top, MAX (start, HIGHER_HALF_MIN), end, page, set_flags);
 }
 
 static void
@@ -162,19 +173,23 @@ remove_full (struct mmu_page_map_part page_map)
 	pmm_free_page (global_mmu_pmm, page_map.page);
 }
 
-static void
+static bool
 remove_partial (struct mmu_page_map_part page_map, uintptr_t start, uintptr_t end)
 {
-	int depth = page_map.depth;
-	int shift = depth_shift_size[depth];
-	uintptr_t base = ((start >> shift) & (~(uintptr_t)MMU_REG_VIRT_MASK)) << shift;
+	const int depth = page_map.depth;
+	const int shift = depth_shift_size[depth];
+	const uintptr_t base = ((start >> shift) & (~(uintptr_t)MMU_REG_VIRT_MASK)) << shift;
 
-	if (start == base && end >= base + (MMU_REG_PAGE_MAP_ENTRY_COUNT << shift))
-		return remove_full (page_map);
+	if (start == base
+	    && end >= base + ((uintptr_t)MMU_REG_PAGE_MAP_ENTRY_COUNT << shift))
+	{
+		remove_full (page_map);
+		return true;
+	}
 
-	uintptr_t p2 = 1ULL << shift;
-	int start_idx = (ROUND_DOWN_P2 (start, p2) - base) >> shift;
-	int end_idx = (ROUND_UP_P2 (end, p2) - base) >> shift;
+	const uintptr_t p2 = 1ULL << shift;
+	const int start_idx = (ROUND_DOWN_P2 (start, p2) - base) >> shift;
+	const int end_idx = (ROUND_UP_P2 (end, p2) - base) >> shift;
 
 	for (size_t i=start_idx; i<end_idx; i++) {
 		struct mmu_page_map_table* table = HHDM_POINTER (page_map.page);
@@ -198,10 +213,11 @@ remove_partial (struct mmu_page_map_part page_map, uintptr_t start, uintptr_t en
 			.depth = depth+1
 		};
 
-		remove_partial (child, blk_start, blk_end);
+		if (remove_partial (child, blk_start, blk_end))
+			table->entry[i] = 0;
 	}
+	return false;
 }
-
 
 void
 mmu_remove (
@@ -227,11 +243,14 @@ mmu_remove (
 	start = ROUND_DOWN_P2 (start, PAGE_SIZE);
 	end = ROUND_UP_P2 (end, PAGE_SIZE);
 
-	remove_partial (top, start, end);
+	if (start < LOWER_HALF_MAX)
+		remove_partial (top, start, MIN (end, LOWER_HALF_MAX));
+	if (end > HIGHER_HALF_MIN)
+		remove_partial (top, MAX (start, HIGHER_HALF_MIN), end);
 }
 
 struct mmu_page_map_part
-mmu_lookup (struct mmu_page_map_part top, void* address)
+mmu_lookup_step (struct mmu_page_map_part top, void* address)
 {
 	if (top.page == 0)
 		top = get_current_page_map_top();
