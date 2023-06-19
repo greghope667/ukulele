@@ -23,6 +23,10 @@ enum mmu_flags {
 	MEMORY_CACHE_WRITE_THROUGH = (1 << 3),
 };
 
+#define MMU_LOWER_HALF_MAX 		0x0000100000000000ULL
+#define MMU_HIGHER_HALF_MIN		0xffff800000000000ULL
+bool mmu_is_canonical_address (uintptr_t address) __attribute__((const));
+
 /*
  * How deep through the page tables we are looking.
  * Depth 0 is top-level. For x86_64 this is the PML4 (possibly PML5).
@@ -84,14 +88,16 @@ void mmu_remove (struct mmu_page_map_part top,
  * Slightly more efficient versions for the (relatively common) case
  * of assigning/removing a single page, i.e. the above functions
  * with size = PAGE_SIZE
+ *
+ * TODO: After refactoring, these are no longer more efficient - needs work
  */
 void mmu_assign_1 (struct mmu_page_map_part top,
-				   enum mmu_flags flags,
-				   physical_t page,
-				   void* address);
+		   enum mmu_flags flags,
+		   physical_t page,
+		   void* address);
 
 void mmu_remove_1 (struct mmu_page_map_part top,
-				   void* address);
+		   void* address);
 
 /*
  * Iterate through the page tables to find where a pointer goes.
