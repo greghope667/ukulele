@@ -5,8 +5,6 @@
 #include "macros.h"
 
 #include "memory/pmm.h"
-#include "libk/kstring.h"
-#include "libk/kstdio.h"
 
 /*
  * MMU driver implementation
@@ -56,7 +54,7 @@ static const int depth_shift_size[] = {
 static page_map_entry_t
 convert_flags (enum mmu_flags flags)
 {
-	page_map_entry_t f = 0;
+	page_map_entry_t f = MMU_REG_PRESENT;
 	if (flags & MEMORY_USER)
 		f |= MMU_REG_USER;
 	if (flags & MEMORY_CACHE_WRITE_THROUGH)
@@ -115,8 +113,10 @@ apply_nodes (
 	const int shift = depth_shift_size[depth];
 	const uintptr_t p2 = 1ULL << shift;
 
+#define SHIFTL(x) (((uintptr_t)(x)) << shift)
+
 	const uintptr_t base = ROUND_DOWN_P2 (
-		loc.start, MMU_REG_PAGE_MAP_ENTRY_COUNT << shift);
+		loc.start, SHIFTL (MMU_REG_PAGE_MAP_ENTRY_COUNT));
 
 	const int start_idx = (ROUND_DOWN_P2 (loc.start, p2) - base) >> shift;
 	const int end_idx = (ROUND_UP_P2 (loc.end, p2) - base) >> shift;
@@ -125,8 +125,8 @@ apply_nodes (
 		struct mmu_page_map_table* table = HHDM_POINTER (loc.page.page);
 		page_map_entry_t entry = table->entry[i];
 
-		uintptr_t blk_start = (((size_t)i) << shift) + base;
-		uintptr_t blk_end = (((size_t)(i+1)) << shift) + base;
+		uintptr_t blk_start = SHIFTL(i) + base;
+		uintptr_t blk_end = SHIFTL(i+1) + base;
 		blk_start = MAX (loc.start, blk_start);
 		blk_end = MIN (loc.end, blk_end);
 
@@ -141,6 +141,7 @@ apply_nodes (
 
 		visit (child, &table->entry[i], ctx);
 	}
+#undef SHIFTL
 }
 
 static void
@@ -149,16 +150,14 @@ node_callback_reserve (
 	page_map_entry_t* entry,
 	void* ctx
 ){
-	if (loc.page.depth == PAGE_MAP_DEPTH_BOTTOM)
-		return;
-
 	if (!(*entry & MMU_REG_PRESENT)) {
 		page_map_entry_t next = allocate ();
 		*entry = next | PM_PERMS;
 		loc.page.page = next;
 	}
 
-	apply_nodes (loc, node_callback_reserve, NULL);
+	if (loc.page.depth < PAGE_MAP_DEPTH_BOTTOM)
+		apply_nodes (loc, node_callback_reserve, NULL);
 }
 
 static void
@@ -203,7 +202,7 @@ node_callback_leaf (
 	page_map_entry_t* entry,
 	void* ctx
 ){
-	if (loc.page.depth < PAGE_MAP_DEPTH_BOTTOM) {
+	if (loc.page.depth <= PAGE_MAP_DEPTH_BOTTOM) {
 		apply_nodes (loc, node_callback_leaf, ctx);
 		return;
 	}
@@ -226,7 +225,7 @@ leaf_callback_assign_linear (
 ){
 	struct leaf_callback_assign_ctx* data = ctx;
 	physical_t addr = virt_addr - data->v_base + data->p_base;
-	*entry = addr & data->flags;
+	*entry = addr | data->flags;
 }
 
 static void
@@ -276,7 +275,6 @@ mmu_assign (
 	size_t size,
 	physical_t page
 ){
-	page_map_entry_t set_flags = convert_flags (flags) | MMU_REG_PRESENT;
 	struct node_command_loc loc = {
 		.page = top,
 		.start = (uintptr_t)address,
